@@ -40,6 +40,12 @@ myDB(async client => {
             showLogin: true
         });
     });
+
+    //Login
+    app.post('/login', passport.authenticate('local', { failureRedirect: '/' }), (req, res) => {
+        res.redirect('/profile');
+    });
+
     app
         .route('/profile')
         .get(ensureAuthenticated, (req, res) => {
@@ -49,24 +55,15 @@ myDB(async client => {
             });
         });
 
-
-    //Login
-    app.post('/login', passport.authenticate('local', { failureRedirect: '/' }), (req, res) => {
-        res.redirect('/profile');
-    });
-
     //Serialized and desserialize
     passport.serializeUser((user, done) => {
         done(null, user._id);
     });
-
     passport.deserializeUser((id, done) => {
         myDataBase.findOne({ _id: new ObjectID(id) }, (err, doc) => {
-
             done(null, doc);
         });
     });
-
     passport.use(new LocalStrategy(
         function(username, password, done) {
             myDataBase.findOne({ username: username }, function(err, user) {
@@ -78,14 +75,12 @@ myDB(async client => {
             });
         }
     ));
-
     // Be sure to add this...
 }).catch(e => {
     app.route('/').get((req, res) => {
         res.render('pug', { title: e, message: 'Unable to login' });
     });
 });
-
 //Middleware
 function ensureAuthenticated(req, res, next) {
     if (req.isAuthenticated()) {
