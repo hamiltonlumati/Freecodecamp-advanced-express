@@ -1,4 +1,5 @@
 'use strict';
+const routes = require('./routes.js');
 require('dotenv').config();
 const express = require('express');
 const myDB = require('./connection');
@@ -8,6 +9,7 @@ const session = require('express-session');
 const passport = require('passport');
 const ObjectID = require('mongodb').ObjectID;
 const LocalStrategy = require('passport-local');
+const bcrypt = require('bcrypt');
 
 const app = express();
 
@@ -28,34 +30,75 @@ app.use(session({
 }));
 
 
-myDB(async client => {
+myDB(async(client) => {
     const myDataBase = await client.db('database').collection('users');
 
     // Be sure to change the title
     app.route('/').get((req, res) => {
-        //Change the response to render the Pug template
+        // Change the response to render the Pug template
         res.render('index', {
             title: 'Connected to Database',
             message: 'Please login',
-            showLogin: true
+            showLogin: true,
+            showRegistration: true
         });
     });
 
-    //Login
-    app.post('/login', passport.authenticate('local', { failureRedirect: '/' }), (req, res) => {
+    //Register
+    app.post('/register', (req, res, next) => {
+            const hash = bcrypt.hashSync(req.body.password, 12);
+            myDataBase.findOne({ username: req.body.username }, function(err, user) {
+                if (err) {
+                    next(err);
+                } else if (user) {
+                    res.redirect('/');
+                } else {
+                    myDataBase.insertOne({
+                            username: req.body.username,
+                            password: hash
+                        },
+                        (err, doc) => {
+                            if (err) {
+                                res.redirect('/');
+                            } else {
+                                // The inserted document is held within
+                                // the ops property of the doc
+                                next(null, doc.ops[0]);
+                            }
+                        }
+                    )
+                }
+            })
+        },
+        passport.authenticate('local', { failureRedirect: '/' }),
+        (req, res, next) => {
+            res.redirect('/profile');
+        }
+    );
+
+    app.route('/login').post(passport.authenticate('local', { failureRedirect: '/' }), (req, res) => {
         res.redirect('/profile');
     });
 
-    app
-        .route('/profile')
-        .get(ensureAuthenticated, (req, res) => {
-            console.log(req.user.username);
-            res.render('/profile', {
-                'username': req.user.username
-            });
+    app.route('/profile').get(ensureAuthenticated, (req, res) => {
+        res.render('/profile', { username: req.user.username });
+    });
+
+    //Unauthenticate
+    app.route('/logout')
+        .get((req, res) => {
+            req.logout();
+            res.redirect('/');
         });
 
-    //Serialized and desserialize
+    //404
+    app.use((req, res, next) => {
+        res.status(404)
+            .type('text')
+            .send('Not Found');
+    });
+
+    // Serialization and deserialization here...
     passport.serializeUser((user, done) => {
         done(null, user._id);
     });
@@ -70,24 +113,26 @@ myDB(async client => {
                 console.log('User ' + username + ' attempted to log in.');
                 if (err) { return done(err); }
                 if (!user) { return done(null, false); }
-                if (password !== user.password) { return done(null, false); }
+                if (!bcrypt.compareSync(password, user.password)) {
+                    return done(null, false);
+                }
                 return done(null, user);
             });
         }
     ));
     // Be sure to add this...
-}).catch(e => {
+}).catch((e) => {
     app.route('/').get((req, res) => {
         res.render('pug', { title: e, message: 'Unable to login' });
     });
 });
-//Middleware
+
 function ensureAuthenticated(req, res, next) {
     if (req.isAuthenticated()) {
         return next();
     }
     res.redirect('/');
-};
+}
 
 
 // app.listen out here...
