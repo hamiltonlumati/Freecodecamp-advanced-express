@@ -8,6 +8,8 @@ const session = require('express-session');
 const passport = require('passport');
 const ObjectID = require('mongodb').ObjectID;
 const LocalStrategy = require('passport-local');
+const routes = require('./routes');
+const auth = require('./auth.js');
 
 const app = express();
 
@@ -30,6 +32,9 @@ app.use(session({
 
 myDB(async client => {
     const myDataBase = await client.db('database').collection('users');
+
+    routes(app, myDataBase);
+    auth(app, myDataBase);
 
     // Be sure to change the title
     app.route('/').get((req, res) => {
